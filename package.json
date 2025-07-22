@@ -6,7 +6,12 @@
   "main": "index.js",
   "scripts": {
     "start": "node collect.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "analytics:up": "docker-compose up -d",
+    "analytics:down": "docker-compose down",
+    "analytics:logs": "docker-compose logs -f",
+    "analytics:restart": "docker-compose restart",
+    "analytics:clean": "docker-compose down -v --remove-orphans"
   },
   "keywords": [],
   "author": "",
