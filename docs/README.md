@@ -86,13 +86,16 @@ pnpm run collect:polygon    # Polygon
 CREATE TABLE erc20_transfers_130 (
     block_number UInt64,
     block_timestamp DateTime,
+    log_index UInt32,
+    transaction_hash String,
     contract_address LowCardinality(String),
     from_address String,
     to_address String,
     value UInt256,
-    timestamp DateTime DEFAULT now()
+    db_write_timestamp DateTime DEFAULT now()
 ) ENGINE = MergeTree()
-ORDER BY (contract_address, block_number, timestamp);
+ORDER BY (contract_address, block_number, log_index)
+PARTITION BY toDate(block_timestamp);
 ```
 
 ### Token Metadata Tables: `token_metadata_{chainId}`

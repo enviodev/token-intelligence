@@ -84,16 +84,18 @@ async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS token_intelligence.${tableName} (
         block_number UInt64,
         block_timestamp DateTime,
+        log_index UInt32,
+        transaction_hash String,
         contract_address LowCardinality(String),
         from_address String,
         to_address String,
         value UInt256,
-        timestamp DateTime DEFAULT now(),
+        db_write_timestamp DateTime DEFAULT now(),
         
         INDEX idx_contract contract_address TYPE bloom_filter GRANULARITY 1
       ) ENGINE = MergeTree()
-      ORDER BY (contract_address, block_number, timestamp)
-      PARTITION BY intDiv(block_number, 100000)
+      ORDER BY (contract_address, block_number, log_index)
+      PARTITION BY toDate(block_timestamp)
     `,
   });
 
@@ -112,10 +114,9 @@ let query = {
   fieldSelection: {
     block: [BlockField.Number, BlockField.Timestamp],
     log: [
-      // LogField.BlockNumber,
-      // LogField.LogIndex,
+      LogField.LogIndex,
       // LogField.TransactionIndex,
-      // LogField.TransactionHash,
+      LogField.TransactionHash,
       LogField.Data,
       LogField.Address,
       LogField.Topic0,
@@ -212,8 +213,10 @@ const main = async () => {
           // Get transfer value from body
           const value = log.body[0]?.val || BigInt(0);
 
-          // Get contract address from original log data
+          // Get contract address, log index, and transaction hash from original log data
           const contractAddress = originalLog.address || "0x0";
+          const logIndex = originalLog.logIndex || 0;
+          const transactionHash = originalLog.transactionHash || "0x0";
 
           // Track total transfer value for statistics
           totalTransferValue += value;
@@ -222,6 +225,8 @@ const main = async () => {
           transferBatch.push({
             block_number: blockNumber,
             block_timestamp: blockTimestamp,
+            log_index: logIndex,
+            transaction_hash: transactionHash,
             contract_address: contractAddress,
             from_address: from,
             to_address: to,
@@ -233,6 +238,8 @@ const main = async () => {
             console.log(
               `\nSample Transfer Event from Block ${blockNumber} (${blockTimestamp}):`
             );
+            console.log(`  Log Index: ${logIndex}`);
+            console.log(`  Transaction: ${transactionHash}`);
             console.log(`  Contract: ${contractAddress}`);
             console.log(`  From: ${from}`);
             console.log(`  To: ${to}`);

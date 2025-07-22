@@ -5,6 +5,19 @@
 -- Each chain has its own transfer table: erc20_transfers_{chainId}
 -- And token metadata table: token_metadata_{chainId}
 --
+-- TABLE DESIGN NOTES:
+-- - ORDER BY (contract_address, block_number, log_index) → Fast token queries + perfect chronological order
+-- - PARTITION BY toDate(block_timestamp) → Daily partitions (consistent across all chains)
+-- - log_index ensures exact transaction ordering within blocks for perfect balance replay
+--
+-- PARTITIONING STRATEGY:
+-- Daily partitions solve the "different block times" problem:
+-- - Ethereum: ~12s/block → inconsistent partition sizes with block-based partitioning  
+-- - Base/Polygon: ~2s/block → would create tiny partitions with block-based
+-- - Daily partitions: consistent ~1 day of data per partition across ALL chains
+-- - Easy archival: "DROP PARTITION '2024-01-01'" 
+-- - Human-readable: "Show me yesterday's data"
+--
 -- Available Chains:
 -- - Chain 1 (Ethereum): erc20_transfers_1, token_metadata_1
 -- - Chain 8453 (Base): erc20_transfers_8453, token_metadata_8453  
@@ -18,6 +31,49 @@
 -- ==========================================
 -- BASIC CHAIN ANALYTICS
 -- ==========================================
+
+-- Perfect chronological order for a specific token (fast + accurate)
+-- Uses contract_address first (fast), then chronological order within that token
+-- CRITICAL: log_index preserves the exact order within each block
+SELECT 
+    block_number,
+    log_index,
+    block_timestamp,
+    transaction_hash,
+    contract_address,
+    from_address,
+    to_address,
+    value
+FROM token_intelligence.erc20_transfers_130  -- Change to your chain
+WHERE contract_address = '0x4200000000000000000000000000000000000006'  -- Specific token
+ORDER BY block_number, log_index  -- Already optimized by table ORDER BY
+LIMIT 100;
+
+-- PARTITION-OPTIMIZED QUERIES:
+
+-- Recent activity (uses only today's partition - VERY fast)
+SELECT contract_address, COUNT() as today_transfers
+FROM token_intelligence.erc20_transfers_130
+WHERE toDate(block_timestamp) = today()
+GROUP BY contract_address
+ORDER BY today_transfers DESC;
+
+-- Last 7 days activity (uses only 7 partitions)
+SELECT 
+    toDate(block_timestamp) as date,
+    COUNT() as daily_transfers,
+    COUNT(DISTINCT contract_address) as active_tokens
+FROM token_intelligence.erc20_transfers_130
+WHERE block_timestamp >= now() - INTERVAL 7 DAY
+GROUP BY toDate(block_timestamp)
+ORDER BY date DESC;
+
+-- Specific date range (efficient partition pruning)
+SELECT contract_address, SUM(value) as volume
+FROM token_intelligence.erc20_transfers_130  
+WHERE toDate(block_timestamp) BETWEEN '2024-01-01' AND '2024-01-31'
+GROUP BY contract_address
+ORDER BY volume DESC;
 
 -- Get transfer count and volume for a specific chain (example: Unichain)
 SELECT 
