@@ -1,0 +1,4 @@
+- Make it stop / start resistant
+- Make collect work on a per chain basis
+- Create dashboards on metabase.
+- Review clickhouse tables and setups.

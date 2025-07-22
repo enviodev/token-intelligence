@@ -11,15 +11,51 @@ import {
 } from "@envio-dev/hypersync-client";
 import { createClient } from "@clickhouse/client";
 
+// Chain configuration - matches available token metadata
+const CHAIN_CONFIG = {
+  1: { name: "Ethereum", hypersyncUrl: "http://1.hypersync.xyz" },
+  10: { name: "Optimism", hypersyncUrl: "http://10.hypersync.xyz" },
+  56: { name: "BSC", hypersyncUrl: "http://56.hypersync.xyz" },
+  130: { name: "Unichain", hypersyncUrl: "http://130.hypersync.xyz" },
+  137: { name: "Polygon", hypersyncUrl: "http://137.hypersync.xyz" },
+  480: { name: "World Chain", hypersyncUrl: "http://480.hypersync.xyz" },
+  1868: { name: "Lightlink", hypersyncUrl: "http://1868.hypersync.xyz" },
+  7777777: { name: "Zora", hypersyncUrl: "http://7777777.hypersync.xyz" },
+  8453: { name: "Base", hypersyncUrl: "http://8453.hypersync.xyz" },
+  42161: { name: "Arbitrum", hypersyncUrl: "http://42161.hypersync.xyz" },
+  43114: { name: "Avalanche", hypersyncUrl: "http://43114.hypersync.xyz" },
+  81457: { name: "Blast", hypersyncUrl: "http://81457.hypersync.xyz" },
+};
+
+// Get chain ID from command line argument or default to Unichain
+const CHAIN_ID = parseInt(process.argv[2]) || 130;
+
+// Validate chain ID
+if (!CHAIN_CONFIG[CHAIN_ID]) {
+  console.error(`❌ Unsupported chain ID: ${CHAIN_ID}`);
+  console.log(
+    "Available chains:",
+    Object.keys(CHAIN_CONFIG)
+      .map((id) => `${id} (${CHAIN_CONFIG[id].name})`)
+      .join(", ")
+  );
+  process.exit(1);
+}
+
+const chainInfo = CHAIN_CONFIG[CHAIN_ID];
+console.log(
+  `🚀 Collecting ERC20 transfers for ${chainInfo.name} (Chain ID: ${CHAIN_ID})`
+);
+
 // Define ERC20 Transfer event signature
 const event_signatures = ["Transfer(address,address,uint256)"];
 
 // Create topic0 hashes from event signatures
 const topic0_list = event_signatures.map((sig) => keccak256(toHex(sig)));
 
-// Initialize Hypersync client
+// Initialize Hypersync client for selected chain
 const client = HypersyncClient.new({
-  url: "http://unichain.hypersync.xyz",
+  url: chainInfo.hypersyncUrl,
 });
 
 // Initialize ClickHouse client
@@ -27,9 +63,10 @@ const clickhouse = createClient({
   url: "http://localhost:8123",
 });
 
-// Initialize database and table
+// Initialize database and chain-specific table
 async function initializeDatabase() {
-  console.log("Setting up ClickHouse database and table...");
+  const tableName = `erc20_transfers_${CHAIN_ID}`;
+  console.log(`Setting up ClickHouse database and table: ${tableName}...`);
 
   // Create database if it doesn't exist
   await clickhouse.command({
@@ -38,13 +75,13 @@ async function initializeDatabase() {
 
   // Drop existing table to recreate with new schema
   await clickhouse.command({
-    query: "DROP TABLE IF EXISTS token_intelligence.erc20_transfers",
+    query: `DROP TABLE IF EXISTS token_intelligence.${tableName}`,
   });
 
-  // Create table with updated schema
+  // Create chain-specific table with updated schema
   await clickhouse.command({
     query: `
-      CREATE TABLE IF NOT EXISTS token_intelligence.erc20_transfers (
+      CREATE TABLE IF NOT EXISTS token_intelligence.${tableName} (
         block_number UInt64,
         block_timestamp DateTime,
         contract_address LowCardinality(String),
@@ -60,7 +97,8 @@ async function initializeDatabase() {
     `,
   });
 
-  console.log("✅ Database and table ready!");
+  console.log(`✅ Database and table ready: ${tableName}!`);
+  return tableName;
 }
 
 // Define query for ERC20 Transfer events
@@ -96,11 +134,11 @@ let query = {
 };
 
 // Batch insert function for better performance
-async function insertTransferBatch(transfers) {
+async function insertTransferBatch(transfers, tableName) {
   if (transfers.length === 0) return;
 
   await clickhouse.insert({
-    table: "token_intelligence.erc20_transfers",
+    table: `token_intelligence.${tableName}`,
     values: transfers,
     format: "JSONEachRow",
   });
@@ -110,7 +148,7 @@ const main = async () => {
   console.log("Starting ERC20 Transfer event scan...");
 
   // Initialize database and table
-  await initializeDatabase();
+  const tableName = await initializeDatabase();
 
   // Create decoder outside the loop for better performance
   const decoder = Decoder.fromSignatures([
@@ -211,7 +249,7 @@ const main = async () => {
       // Insert batch when it reaches the batch size
       if (transferBatch.length >= BATCH_SIZE) {
         try {
-          await insertTransferBatch(transferBatch);
+          await insertTransferBatch(transferBatch, tableName);
           console.log(
             `💾 Inserted ${transferBatch.length} transfers to database`
           );
@@ -242,7 +280,7 @@ const main = async () => {
   // Insert any remaining transfers in the final batch
   if (transferBatch.length > 0) {
     try {
-      await insertTransferBatch(transferBatch);
+      await insertTransferBatch(transferBatch, tableName);
       console.log(
         `💾 Inserted final batch of ${transferBatch.length} transfers to database`
       );
@@ -260,7 +298,7 @@ const main = async () => {
   );
   console.log(`💰 Total Transfer Value: ${totalTransferValue.toString()}`);
   console.log(
-    `💾 All data saved to ClickHouse database: token_intelligence.erc20_transfers`
+    `💾 All data saved to ClickHouse database: token_intelligence.${tableName}`
   );
 
   // Close ClickHouse connection
