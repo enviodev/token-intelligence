@@ -47,13 +47,15 @@ async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS token_intelligence.erc20_transfers (
         block_number UInt64,
         block_timestamp DateTime,
-        contract_address String,
+        contract_address LowCardinality(String),
         from_address String,
         to_address String,
         value UInt256,
-        timestamp DateTime DEFAULT now()
+        timestamp DateTime DEFAULT now(),
+        
+        INDEX idx_contract contract_address TYPE bloom_filter GRANULARITY 1
       ) ENGINE = MergeTree()
-      ORDER BY (block_number, timestamp)
+      ORDER BY (contract_address, block_number, timestamp)
       PARTITION BY intDiv(block_number, 100000)
     `,
   });
