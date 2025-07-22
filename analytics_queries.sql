@@ -599,6 +599,79 @@ ORDER BY balance DESC
 LIMIT 100;
 */
 
+-- ==========================================
+-- TOKEN METADATA QUERIES (Chain-Specific Tables)
+-- ==========================================
+
+-- Get token metadata for transfers (enrich with names/symbols)
+-- Example: WETH transfers with metadata
+SELECT 
+    t.contract_address,
+    m.name,
+    m.symbol,
+    m.decimals,
+    COUNT() as transfer_count,
+    SUM(t.value) as total_volume
+FROM token_intelligence.erc20_transfers t
+LEFT JOIN token_intelligence.token_metadata_1 m ON t.contract_address = m.contract_address  -- Ethereum mainnet
+WHERE t.contract_address = '0x4200000000000000000000000000000000000006'  -- Replace with your target token
+GROUP BY t.contract_address, m.name, m.symbol, m.decimals;
+
+-- Find all available token metadata across chains
+SELECT 
+    '1' as chain_id, 'Ethereum' as chain_name, COUNT() as token_count FROM token_intelligence.token_metadata_1
+UNION ALL SELECT 
+    '8453' as chain_id, 'Base' as chain_name, COUNT() as token_count FROM token_intelligence.token_metadata_8453
+UNION ALL SELECT 
+    '137' as chain_id, 'Polygon' as chain_name, COUNT() as token_count FROM token_intelligence.token_metadata_137
+UNION ALL SELECT 
+    '42161' as chain_id, 'Arbitrum' as chain_name, COUNT() as token_count FROM token_intelligence.token_metadata_42161
+UNION ALL SELECT 
+    '10' as chain_id, 'Optimism' as chain_name, COUNT() as token_count FROM token_intelligence.token_metadata_10
+UNION ALL SELECT 
+    '56' as chain_id, 'BSC' as chain_name, COUNT() as token_count FROM token_intelligence.token_metadata_56
+ORDER BY token_count DESC;
+
+-- Search for tokens by symbol across all chains
+-- Example: Find all USDC tokens
+SELECT 
+    '1' as chain_id, 'Ethereum' as chain_name, contract_address, name, symbol, decimals 
+FROM token_intelligence.token_metadata_1 WHERE symbol ILIKE '%USDC%'
+UNION ALL SELECT 
+    '8453' as chain_id, 'Base' as chain_name, contract_address, name, symbol, decimals 
+FROM token_intelligence.token_metadata_8453 WHERE symbol ILIKE '%USDC%'
+UNION ALL SELECT 
+    '137' as chain_id, 'Polygon' as chain_name, contract_address, name, symbol, decimals 
+FROM token_intelligence.token_metadata_137 WHERE symbol ILIKE '%USDC%'
+UNION ALL SELECT 
+    '42161' as chain_id, 'Arbitrum' as chain_name, contract_address, name, symbol, decimals 
+FROM token_intelligence.token_metadata_42161 WHERE symbol ILIKE '%USDC%'
+ORDER BY chain_id, symbol;
+
+-- Get token details for a specific contract address (try different chains)
+-- Replace with your contract address
+SELECT 
+    contract_address,
+    name,
+    symbol,
+    decimals,
+    'Base Chain' as chain_name
+FROM token_intelligence.token_metadata_8453 
+WHERE contract_address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'  -- USDC on Base
+LIMIT 1;
+
+-- Find tokens with unusual decimal places
+SELECT 
+    '8453' as chain_id,
+    contract_address,
+    name,
+    symbol,
+    decimals
+FROM token_intelligence.token_metadata_8453 
+WHERE decimals NOT IN (18, 6, 8)
+ORDER BY decimals DESC
+LIMIT 20;
+
 -- Template: Time-window analysis
 -- Analyze activity in specific time period
 /*

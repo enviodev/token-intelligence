@@ -6,6 +6,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node collect.js",
+    "populate-cache": "node populate_token_cache.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "analytics:up": "docker-compose up -d",
     "analytics:down": "docker-compose down",
