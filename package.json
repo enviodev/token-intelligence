@@ -28,7 +28,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "@envio-dev/hypersync-client": "^0.6.5",
     "viem": "^2.33.0",

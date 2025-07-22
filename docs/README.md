@@ -215,4 +215,4 @@ Add your analytics queries to `queries/` directory and reference them in documen
 
 ## 📄 License
 
-ISC
+GPL v3
