@@ -87,8 +87,11 @@ const main = async () => {
       // Track if we've printed an event for this batch
       let printedEventThisBatch = false;
 
-      // Process transfer events
-      for (const log of decodedLogs) {
+      // Process transfer events - need both original logs and decoded logs
+      for (let i = 0; i < decodedLogs.length; i++) {
+        const log = decodedLogs[i];
+        const originalLog = res.data.logs[i];
+
         // Skip invalid logs
         if (log === null) {
           continue;
@@ -103,6 +106,9 @@ const main = async () => {
           // Get transfer value from body
           const value = log.body[0]?.val || BigInt(0);
 
+          // Get contract address from original log data
+          const contractAddress = originalLog.address || "unknown";
+
           // Track total transfer value for statistics
           totalTransferValue += value;
 
@@ -111,6 +117,7 @@ const main = async () => {
             console.log(
               "\nSample Transfer Event from Block " + res.nextBlock + ":"
             );
+            console.log(`  Contract: ${contractAddress}`);
             console.log(`  From: ${from}`);
             console.log(`  To: ${to}`);
             console.log(`  Value: ${value.toString()}`);
