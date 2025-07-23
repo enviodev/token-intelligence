@@ -63,6 +63,37 @@ const clickhouse = createClient({
   url: "http://localhost:8123",
 });
 
+// Get resume position by finding and deleting the last (potentially incomplete) block
+async function getResumeBlock(tableName) {
+  try {
+    const result = await clickhouse.query({
+      query: `SELECT MAX(block_number) as max_block FROM token_intelligence.${tableName}`,
+      format: "JSONEachRow",
+    });
+
+    const rows = await result.json();
+    if (rows.length === 0 || !rows[0].max_block) {
+      console.log("📊 No existing data found, starting from block 0");
+      return 0;
+    }
+
+    const lastBlock = parseInt(rows[0].max_block);
+
+    // Delete the potentially incomplete last block
+    await clickhouse.command({
+      query: `DELETE FROM token_intelligence.${tableName} WHERE block_number = ${lastBlock}`,
+    });
+
+    console.log(`🗑️  Deleted potentially incomplete block ${lastBlock}`);
+    console.log(`📊 Resuming collection from block ${lastBlock}`);
+
+    return lastBlock;
+  } catch (error) {
+    console.log("📊 No existing data found, starting from block 0");
+    return 0;
+  }
+}
+
 // Initialize database and chain-specific table
 async function initializeDatabase() {
   const tableName = `erc20_transfers_${CHAIN_ID}`;
@@ -73,12 +104,7 @@ async function initializeDatabase() {
     query: "CREATE DATABASE IF NOT EXISTS token_intelligence",
   });
 
-  // Drop existing table to recreate with new schema
-  await clickhouse.command({
-    query: `DROP TABLE IF EXISTS token_intelligence.${tableName}`,
-  });
-
-  // Create chain-specific table with updated schema
+  // Create chain-specific table (don't drop existing data!)
   await clickhouse.command({
     query: `
       CREATE TABLE IF NOT EXISTS token_intelligence.${tableName} (
@@ -105,7 +131,7 @@ async function initializeDatabase() {
 
 // Define query for ERC20 Transfer events
 let query = {
-  fromBlock: 0,
+  fromBlock: 0, // Will be updated by getResumeBlock
   logs: [
     {
       topics: [topic0_list],
@@ -138,11 +164,54 @@ let query = {
 async function insertTransferBatch(transfers, tableName) {
   if (transfers.length === 0) return;
 
-  await clickhouse.insert({
-    table: `token_intelligence.${tableName}`,
-    values: transfers,
-    format: "JSONEachRow",
-  });
+  try {
+    await clickhouse.insert({
+      table: `token_intelligence.${tableName}`,
+      values: transfers,
+      format: "JSONEachRow",
+    });
+  } catch (error) {
+    if (error.message.includes("Invalid string length")) {
+      console.error("🔍 String length error detected!");
+      console.error("📏 Investigating batch data...");
+
+      // Log problematic records
+      transfers.forEach((transfer, i) => {
+        Object.entries(transfer).forEach(([key, value]) => {
+          if (typeof value === "string" && value.length > 100) {
+            console.error(
+              `  Record ${i}, ${key}: ${
+                value.length
+              } chars - "${value.substring(0, 50)}..."`
+            );
+          }
+          if (typeof value === "bigint" && value > BigInt("1e30")) {
+            console.error(
+              `  Record ${i}, ${key}: extremely large BigInt - ${value.toString()}`
+            );
+          }
+        });
+      });
+
+      // Try to continue with sanitized data
+      const sanitizedTransfers = transfers.map((transfer) => ({
+        ...transfer,
+        transaction_hash: transfer.transaction_hash?.substring(0, 66) || "",
+        contract_address: transfer.contract_address?.substring(0, 42) || "",
+        from_address: transfer.from_address?.substring(0, 42) || "",
+        to_address: transfer.to_address?.substring(0, 42) || "",
+      }));
+
+      console.log("🔄 Retrying with sanitized data...");
+      await clickhouse.insert({
+        table: `token_intelligence.${tableName}`,
+        values: sanitizedTransfers,
+        format: "JSONEachRow",
+      });
+    } else {
+      throw error; // Re-throw other errors
+    }
+  }
 }
 
 const main = async () => {
@@ -150,6 +219,10 @@ const main = async () => {
 
   // Initialize database and table
   const tableName = await initializeDatabase();
+
+  // Get resume position and update query
+  const resumeBlock = await getResumeBlock(tableName);
+  query.fromBlock = resumeBlock;
 
   // Create decoder outside the loop for better performance
   const decoder = Decoder.fromSignatures([
@@ -174,7 +247,7 @@ const main = async () => {
       break;
     }
 
-    // Count total events
+    // Process logs if available
     if (res.data && res.data.logs) {
       totalEvents += res.data.logs.length;
 
@@ -230,7 +303,7 @@ const main = async () => {
             contract_address: contractAddress,
             from_address: from,
             to_address: to,
-            value: value.toString(), // ClickHouse will parse this as UInt256
+            value: value, // Keep as BigInt - ClickHouse client will handle UInt256 conversion
           });
 
           // Print details for just the first transfer event in each batch
