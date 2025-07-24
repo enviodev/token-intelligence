@@ -18,6 +18,9 @@
     "collect:blast": "node src/collect.js 81457",
     "collect:zora": "node src/collect.js 7777777",
     "populate-cache": "node scripts/populate_token_cache.js",
+    "create-dashboards": "node scripts/create_metabase_dashboard.js",
+    "cleanup-dashboards": "node scripts/cleanup_metabase_dashboards.js",
+    "test-sql": "node scripts/test_sql_queries.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "analytics:up": "docker-compose -f config/docker-compose.yml up -d",
     "analytics:down": "docker-compose -f config/docker-compose.yml down",
@@ -30,8 +33,8 @@
   "author": "",
   "license": "GPL-3.0-or-later",
   "dependencies": {
+    "@clickhouse/client": "^1.5.0",
     "@envio-dev/hypersync-client": "^0.6.5",
-    "viem": "^2.33.0",
-    "@clickhouse/client": "^1.5.0"
+    "viem": "^2.33.0"
   }
 }

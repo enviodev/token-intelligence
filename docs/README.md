@@ -9,10 +9,11 @@ token-intelligence/
 ├── src/                    # Main application code
 │   └── collect.js         # ERC20 transfer data collection script
 ├── scripts/               # Utility scripts
-│   └── populate_token_cache.js  # Token metadata population script
+│   ├── populate_token_cache.js      # Token metadata population script
+│   ├── create_metabase_dashboard.js # Auto-create dashboards from SQL
+│   └── cleanup_metabase_dashboards.js # Clean up auto-generated content
 ├── queries/               # SQL analytics queries
-│   ├── chain_analytics_queries.sql  # Multi-chain analytics queries
-│   └── analytics_queries.sql        # Legacy analytics queries
+│   └── dashboard_analytics.sql      # Comprehensive dashboard-ready queries
 ├── docs/                  # Documentation
 │   ├── README.md         # This file
 │   ├── ANALYTICS_SETUP.md # Analytics setup guide
@@ -138,6 +139,39 @@ ORDER BY contract_address;
 - `pnpm run analytics:restart` - Restart services
 - `pnpm run analytics:clean` - Stop and remove all data
 
+### 🚀 Auto-Dashboard Creation
+
+- `pnpm run create-dashboards` - **Automatically create Metabase dashboards from SQL queries**
+- `pnpm run cleanup-dashboards` - **Clean up auto-generated dashboards and questions**
+
+#### **Dashboard Creation Workflow:**
+
+1. ✅ **Parses** `queries/dashboard_analytics.sql` - one comprehensive file
+2. ✅ **Extracts** individual queries with their comment descriptions
+3. ✅ **Creates** Metabase questions/cards for each query
+4. ✅ **Organizes** them into a comprehensive "Token Intelligence Dashboard"
+5. ✅ **Connects** to your ClickHouse database automatically
+
+#### **Iterative Development:**
+
+```bash
+# 1. Clean up previous attempts
+pnpm run cleanup-dashboards
+
+# 2. Update SQL queries with correct table names
+# Edit queries/dashboard_analytics.sql
+# Change: erc20_transfers_130 → erc20_transfers_8453 (for Base)
+
+# 3. Create fresh dashboards
+pnpm run create-dashboards
+```
+
+**Prerequisites**:
+
+- Metabase running (`pnpm run analytics:up`)
+- ClickHouse database connected in Metabase
+- Complete Metabase initial setup (admin user)
+
 ## 📈 Analytics & Queries
 
 ### Web Interfaces
@@ -147,7 +181,7 @@ ORDER BY contract_address;
 
 ### Sample Queries
 
-See `queries/chain_analytics_queries.sql` for comprehensive examples:
+See `queries/dashboard_analytics.sql` for comprehensive examples:
 
 ```sql
 -- Chain overview

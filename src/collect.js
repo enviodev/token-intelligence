@@ -200,6 +200,10 @@ async function insertTransferBatch(transfers, tableName) {
         contract_address: transfer.contract_address?.substring(0, 42) || "",
         from_address: transfer.from_address?.substring(0, 42) || "",
         to_address: transfer.to_address?.substring(0, 42) || "",
+        value:
+          typeof transfer.value === "bigint"
+            ? transfer.value.toString()
+            : transfer.value,
       }));
 
       console.log("🔄 Retrying with sanitized data...");
@@ -303,7 +307,7 @@ const main = async () => {
             contract_address: contractAddress,
             from_address: from,
             to_address: to,
-            value: value, // Keep as BigInt - ClickHouse client will handle UInt256 conversion
+            value: value.toString(), // Convert BigInt to string for ClickHouse UInt256
           });
 
           // Print details for just the first transfer event in each batch
